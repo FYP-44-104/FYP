@@ -1,22 +1,110 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Github, Mail, Slack } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuthContext } from '../context/AuthContext';
+import { useAnalytics } from '../hooks/useAnalytics';
 
 interface AuthFormsProps {
   isOpen: boolean;
   onClose: () => void;
+  redirectPath?: string;
 }
 
-const AuthForms: React.FC<AuthFormsProps> = ({ isOpen, onClose }) => {
+const AuthForms: React.FC<AuthFormsProps> = ({ 
+  isOpen, 
+  onClose, 
+  redirectPath = '/' 
+}) => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [resetSent, setResetSent] = useState(false);
+  const { trackUserAction } = useAnalytics();
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Get the intended destination from location state, if available
+  const from = location.state?.from?.pathname || redirectPath;
+  
+  const { 
+    loading, 
+    error, 
+    signIn, 
+    signUp, 
+    signInWithGoogle, 
+    signInWithGithub, 
+    resetPassword,
+    clearError
+  } = useAuthContext();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Clear form state when modal is closed
+  useEffect(() => {
+    if (!isOpen) {
+      setEmail('');
+      setPassword('');
+      setName('');
+      setResetSent(false);
+      clearError();
+    }
+  }, [isOpen, clearError]);
+
+  const handleSuccessfulAuth = () => {
+    onClose();
+    // Navigate to the intended destination or default redirect path
+    navigate(from);
+  };
+
+  const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle authentication logic here
-    console.log('Form submitted:', { email, password, name });
+    
+    try {
+      if (isSignUp) {
+        await signUp(email, password, name);
+        trackUserAction('email_sign_up');
+      } else {
+        await signIn(email, password);
+        trackUserAction('email_sign_in');
+      }
+      handleSuccessfulAuth();
+    } catch (err) {
+      // Error is handled by useAuth hook
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      await signInWithGoogle();
+      trackUserAction('google_sign_in');
+      handleSuccessfulAuth();
+    } catch (err) {
+      // Error is handled by useAuth hook
+    }
+  };
+
+  const handleGithubLogin = async () => {
+    try {
+      await signInWithGithub();
+      trackUserAction('github_sign_in');
+      handleSuccessfulAuth();
+    } catch (err) {
+      // Error is handled by useAuth hook
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    if (!email) {
+      return;
+    }
+    
+    try {
+      await resetPassword(email);
+      setResetSent(true);
+      trackUserAction('password_reset_request');
+    } catch (err) {
+      // Error is handled by useAuth hook
+    }
   };
 
   return (
@@ -47,16 +135,39 @@ const AuthForms: React.FC<AuthFormsProps> = ({ isOpen, onClose }) => {
               {isSignUp ? 'Create Account' : 'Welcome Back'}
             </h2>
 
+            {error && (
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 text-sm">
+                {error}
+              </div>
+            )}
+
+            {resetSent && (
+              <div className="mb-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg text-green-500 text-sm">
+                Password reset email sent! Check your inbox.
+              </div>
+            )}
+
             <div className="space-y-4 mb-8">
-              <button className="w-full bg-gray-800 hover:bg-gray-700 text-white py-3 px-4 rounded-lg flex items-center justify-center gap-3 transition-colors">
+              <button 
+                onClick={handleGithubLogin}
+                disabled={loading}
+                className="w-full bg-gray-800 hover:bg-gray-700 text-white py-3 px-4 rounded-lg flex items-center justify-center gap-3 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 <Github className="w-5 h-5" />
                 Continue with GitHub
               </button>
-              <button className="w-full bg-gray-800 hover:bg-gray-700 text-white py-3 px-4 rounded-lg flex items-center justify-center gap-3 transition-colors">
+              <button 
+                onClick={handleGoogleLogin}
+                disabled={loading}
+                className="w-full bg-gray-800 hover:bg-gray-700 text-white py-3 px-4 rounded-lg flex items-center justify-center gap-3 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 <Mail className="w-5 h-5 text-red-500" />
                 Continue with Google
               </button>
-              <button className="w-full bg-gray-800 hover:bg-gray-700 text-white py-3 px-4 rounded-lg flex items-center justify-center gap-3 transition-colors">
+              <button 
+                disabled={loading}
+                className="w-full bg-gray-800 hover:bg-gray-700 text-white py-3 px-4 rounded-lg flex items-center justify-center gap-3 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 <Slack className="w-5 h-5 text-blue-500" />
                 Continue with Slack
               </button>
@@ -71,7 +182,7 @@ const AuthForms: React.FC<AuthFormsProps> = ({ isOpen, onClose }) => {
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleEmailAuth} className="space-y-4">
               {isSignUp && (
                 <div>
                   <label htmlFor="name" className="block text-sm font-medium text-gray-400 mb-1">
@@ -84,6 +195,7 @@ const AuthForms: React.FC<AuthFormsProps> = ({ isOpen, onClose }) => {
                     onChange={(e) => setName(e.target.value)}
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg py-2 px-4 text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                     placeholder="John Doe"
+                    disabled={loading}
                   />
                 </div>
               )}
@@ -98,6 +210,8 @@ const AuthForms: React.FC<AuthFormsProps> = ({ isOpen, onClose }) => {
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full bg-gray-800 border border-gray-700 rounded-lg py-2 px-4 text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   placeholder="you@example.com"
+                  disabled={loading}
+                  required
                 />
               </div>
               <div>
@@ -111,21 +225,35 @@ const AuthForms: React.FC<AuthFormsProps> = ({ isOpen, onClose }) => {
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-gray-800 border border-gray-700 rounded-lg py-2 px-4 text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   placeholder="••••••••"
+                  disabled={loading}
+                  required
                 />
               </div>
               <button
                 type="submit"
-                className="w-full bg-primary hover:bg-primary/90 text-white py-3 px-4 rounded-lg font-medium transition-colors"
+                disabled={loading}
+                className="w-full bg-primary hover:bg-primary/90 text-white py-3 px-4 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSignUp ? 'Create Account' : 'Sign In'}
+                {loading ? 'Processing...' : (isSignUp ? 'Create Account' : 'Sign In')}
               </button>
             </form>
+
+            <div className="flex justify-between mt-4">
+              <button
+                onClick={handlePasswordReset}
+                disabled={loading || !email}
+                className="text-sm text-blue-400 hover:text-blue-300 transition-colors disabled:opacity-50"
+              >
+                Reset Password
+              </button>
+            </div>
 
             <p className="mt-6 text-center text-gray-400">
               {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
               <button
                 onClick={() => setIsSignUp(!isSignUp)}
                 className="text-primary hover:text-primary/90 font-medium transition-colors"
+                disabled={loading}
               >
                 {isSignUp ? 'Sign In' : 'Sign Up'}
               </button>
