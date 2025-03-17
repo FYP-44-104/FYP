@@ -9,12 +9,14 @@ interface AuthFormsProps {
   isOpen: boolean;
   onClose: () => void;
   redirectPath?: string;
+  openExternalLink?: boolean;
 }
 
 const AuthForms: React.FC<AuthFormsProps> = ({ 
   isOpen, 
   onClose, 
-  redirectPath = '/' 
+  redirectPath = '/',
+  openExternalLink = false
 }) => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
@@ -52,6 +54,10 @@ const AuthForms: React.FC<AuthFormsProps> = ({
 
   const handleSuccessfulAuth = () => {
     onClose();
+    // Open localhost:3001 in a new tab if openExternalLink is true
+    if (openExternalLink) {
+      window.open('http://localhost:3001', '_blank');
+    }
     // Navigate to the intended destination or default redirect path
     navigate(from);
   };

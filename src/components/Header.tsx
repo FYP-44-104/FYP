@@ -272,7 +272,7 @@ const Header: React.FC = () => {
       <AuthForms 
         isOpen={isAuthOpen} 
         onClose={() => setIsAuthOpen(false)} 
-        redirectPath={location.pathname === '/' ? '/' : location.pathname}
+        openExternalLink={true}
       />
     </>
   );
